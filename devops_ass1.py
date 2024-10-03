@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import boto3, json, random, string, sys
+import boto3, json, random, string, subprocess
 
 ec2 = boto3.resource('ec2')
 s3 = boto3.resource("s3")
@@ -31,7 +31,6 @@ for bucket in s3.buckets.all():
     except Exception as error:
         print (error)
 
-
 print("!!! Preparing new EC2 instance...")
 
 new_instances = ec2.create_instances(
@@ -41,7 +40,7 @@ new_instances = ec2.create_instances(
     InstanceType='t2.nano',
     KeyName=key_name,
     SecurityGroupIds=[security_group],
-    UserData="""#!/bin/bash
+    UserData=f"""#!/bin/bash
 yum install httpd -y
 systemctl start httpd
 systemctl enable httpd
@@ -120,6 +119,20 @@ bucket_policy = {
 
 s3.Bucket(new_bucket.name).Policy().put(Policy=json.dumps(bucket_policy))
 
+print(f"!!! Downloading image from {image_url}...")
+try:
+    response = subprocess.run(['curl','-O', image_url])
+    print(response)
+except Exception as error:
+    print (error)
+
+print(f"!!! Uploading image from {image_url} to {new_bucket.name}...")
+try:
+    response = s3.Object(new_bucket.name,'logo.jpg').put(Body=open('logo.jpg','rb'),ContentType='image/jpeg')
+    print(response)
+except Exception as error:
+    print (error)
+
 print("!!! Creating index.html...")
 
 #https://www.geeksforgeeks.org/creating-and-viewing-html-files-with-python/
@@ -130,7 +143,7 @@ with open('index.html','w') as file:
     </head>
     <body>
         <h2>Here is the image from {image_url}!</h2>
-        <img src="{image_url}" alt="Looks like it didn't work LOL!">
+        <img src="http://{new_bucket.name}.s3.amazonaws.com/logo.jpg" alt="Looks like it didn't work LOL!">
         <p>Isn't it great! :D</p>
     </body>
 </html>""")
