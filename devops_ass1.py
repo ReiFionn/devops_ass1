@@ -4,8 +4,9 @@ import boto3, json, random, string, sys
 ec2 = boto3.resource('ec2')
 s3 = boto3.resource("s3")
 s3client = boto3.client("s3")
-keyName = 'EvaUnit01'
-securityGroup = 'sg-0d2f8f0a77bd98152'
+key_name = 'EvaUnit00'
+security_group = 'sg-0d2f8f0a77bd98152'
+image_url = 'http://devops.witdemo.net/logo.jpg'
 
 print(f"!!! Terminating previous instances (if any)...")
 for instance in ec2.instances.all():
@@ -38,8 +39,8 @@ new_instances = ec2.create_instances(
     MinCount=1,
     MaxCount=1,
     InstanceType='t2.nano',
-    KeyName=keyName,
-    SecurityGroupIds=[securityGroup],
+    KeyName=key_name,
+    SecurityGroupIds=[security_group],
     UserData="""#!/bin/bash
 yum install httpd -y
 systemctl start httpd
@@ -65,7 +66,6 @@ curl -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-da
 
 cp index.html /var/www/html/index.html""")
 
-
 print("!!! Preparing new EC2 instance's tags...")
 
 new_instances[0].reload()
@@ -82,7 +82,13 @@ new_instances[0].reload()
 print (f'!!! Instance {new_instances[0].id} created sucessfully!\n!!! Waiting for instance to run...')
 new_instances[0].wait_until_running()
 new_instances[0].reload()
-print (f'!!! Instance {new_instances[0].id} is running! Visit the web page at: http://{new_instances[0].public_ip_address}\n!!! Creating S3 bucket...')
+print (f'!!! Instance {new_instances[0].id} is running! Visit the web page at: http://{new_instances[0].public_ip_address}\n!!! Writing website to freilly-websites.txt...')
+
+#https://www.pythontutorial.net/python-basics/python-write-text-file/
+with open('freilly-websites.txt','w') as file:
+    file.write(f"EC2 Instance: http://{new_instances[0].public_ip_address}")
+
+print('!!! Creating S3 bucket...')
 
 #https://stackoverflow.com/questions/2030053/how-to-generate-random-strings-in-python
 new_bucket = s3.create_bucket(Bucket=''.join(random.choice(string.ascii_lowercase + string.digits) for _ in range(6))+"-freilly")
@@ -114,4 +120,28 @@ bucket_policy = {
 
 s3.Bucket(new_bucket.name).Policy().put(Policy=json.dumps(bucket_policy))
 
-print(f"!!! {new_bucket.name} launched! Visit the web page at: {new_bucket.name}.s3-website-us-east-1.amazonaws.com")
+print("!!! Creating index.html...")
+
+#https://www.geeksforgeeks.org/creating-and-viewing-html-files-with-python/
+with open('index.html','w') as file:
+    file.write(f"""<html>
+    <head>
+        <title>{new_bucket.name}'s Website!</title>
+    </head>
+    <body>
+        <h2>Here is the image from {image_url}!</h2>
+        <img src="{image_url}" alt="Looks like it didn't work LOL!">
+        <p>Isn't it great! :D</p>
+    </body>
+</html>""")
+    
+print(f"!!! Uploading index.html to {new_bucket.name}...")
+try:
+    response = s3.Object(new_bucket.name,'index.html').put(Body=open('index.html','rb'),ContentType='text/html')
+    print(response)
+except Exception as error:
+ print (error)
+
+print(f"!!! {new_bucket.name} launched! Visit the web page at: http://{new_bucket.name}.s3-website-us-east-1.amazonaws.com\n!!! Writing website to freilly-websites.txt...")
+with open('freilly-websites.txt','a') as file:
+    file.write(f"\nS3 Bucket: http://{new_bucket.name}.s3-website-us-east-1.amazonaws.com")
