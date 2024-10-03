@@ -13,7 +13,7 @@ for instance in ec2.instances.all():
         response = instance.terminate()
         print(response)
 
-print(f"!!! Emptying previous buckets (if any)...")
+print("!!! Emptying previous buckets (if any)...")
 for bucket in s3.buckets.all():
     for key in bucket.objects.all():
         try:
@@ -22,7 +22,7 @@ for bucket in s3.buckets.all():
         except Exception as error:
             print (error)
 
-print(f"!!! Deleteing previous buckets (if any)...")
+print("!!! Deleteing previous buckets (if any)...")
 for bucket in s3.buckets.all():
     try:
         response = bucket.delete()
@@ -31,7 +31,7 @@ for bucket in s3.buckets.all():
         print (error)
 
 
-print(f"!!! Preparing new EC2 instance...")
+print("!!! Preparing new EC2 instance...")
 
 new_instances = ec2.create_instances(
     ImageId='ami-0ebfd941bbafe70c6',
@@ -66,7 +66,7 @@ curl -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-da
 cp index.html /var/www/html/index.html""")
 
 
-print(f"!!! Preparing new EC2 instance's tags...")
+print("!!! Preparing new EC2 instance's tags...")
 
 new_instances[0].reload()
 new_instances[0].create_tags(
@@ -79,15 +79,15 @@ new_instances[0].create_tags(
 )
 
 new_instances[0].reload()
-print (f'!!! Instance ' + new_instances[0].id + ' created sucessfully!\n!!! Waiting for instance to run...')
+print (f'!!! Instance {new_instances[0].id} created sucessfully!\n!!! Waiting for instance to run...')
 new_instances[0].wait_until_running()
 new_instances[0].reload()
-print (f'!!! Instance ' + new_instances[0].id + ' is running! Visit the web page at: http://' + new_instances[0].public_ip_address + '\n!!! Creating S3 bucket...')
+print (f'!!! Instance {new_instances[0].id} is running! Visit the web page at: http://{new_instances[0].public_ip_address}\n!!! Creating S3 bucket...')
 
 #https://stackoverflow.com/questions/2030053/how-to-generate-random-strings-in-python
 new_bucket = s3.create_bucket(Bucket=''.join(random.choice(string.ascii_lowercase + string.digits) for _ in range(6))+"-freilly")
 
-print(f'!!! Configuring ' + new_bucket.name + ' website...')
+print(f'!!! Configuring {new_bucket.name} website...')
 
 website_configuration = {
  'ErrorDocument': {'Key': 'error.html'},
@@ -114,4 +114,4 @@ bucket_policy = {
 
 s3.Bucket(new_bucket.name).Policy().put(Policy=json.dumps(bucket_policy))
 
-print(f"!!! " + new_bucket.name + " launched! Visit the web page at: " + new_bucket.name + ".s3-website-us-east-1.amazonaws.com")
+print(f"!!! {new_bucket.name} launched! Visit the web page at: {new_bucket.name}.s3-website-us-east-1.amazonaws.com")
