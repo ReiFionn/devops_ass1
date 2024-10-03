@@ -1,2 +1,2 @@
-EC2 Instance: http://34.230.67.204
-S3 Bucket: http://oix1k3-freilly.s3-website-us-east-1.amazonaws.com
+EC2 Instance: http://3.81.39.53
+S3 Bucket: http://8dnqd5-freilly.s3-website-us-east-1.amazonaws.com
