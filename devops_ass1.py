@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-import boto3, json, random, string, subprocess, datetime, time
+import boto3, json, random, string, subprocess, datetime, time, socket
 
 # Initialize EC2 and S3 resources using boto3
 ec2 = boto3.resource('ec2')
 s3 = boto3.resource('s3')
 s3client = boto3.client('s3')
+snsClient = boto3.client('sns')
 
 # Define constants
 key_name = 'EvaUnit00'
@@ -182,6 +183,80 @@ try:
 except Exception as error:
     print(f'Error putting new policy into S3 bucket: {error}')
 
+
+print('!!! Creating SNS topic to send an email whenever an object is created in bucket...')
+# Creates an SNS topic
+# https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/s3/client/put_bucket_notification_configuration.html, 
+# https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sns/client/subscribe.html, 
+# https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sns/client/set_topic_attributes.html,
+# https://docs.aws.amazon.com/code-library/latest/ug/python_3_sns_code_examples.html
+
+try:
+    response = snsClient.create_topic(Name='s3-notification-topic')
+    topicArn = response['TopicArn'] # Retrieves the ARN of the created topic (Amazon Resource Name)
+    log_to_logs(f"SNS topic creation response: {response}")
+except Exception as error:
+    print(f'Error creating new SNS topic: {error}')
+
+# Subscribes specified email to the SNS topic for notifications
+try:
+    response = snsClient.subscribe(
+        TopicArn=topicArn,
+        Protocol='email',
+        Endpoint='20101977@mail.wit.ie'
+    )
+    log_to_logs(f"Email subscription to SNS response: {response}")
+except Exception as error:
+    print(f'Error subscribing email to SNS topic: {error}')
+
+# Defines a policy for the SNS topic, allowing S3 to publish messages to it
+sns_topic_policy = {
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect":"Allow",
+            "Principal":{"Service": "s3.amazonaws.com"},
+            "Action":"SNS:Publish",
+            "Resource": topicArn,
+            "Condition": {
+                "ArnLike": {
+                    "aws:SourceArn": f"arn:aws:s3:::{new_bucket.name}"
+                }
+            }
+        }
+    ]
+}
+
+# Sets the defined policy for the SNS topic
+try:
+    response = snsClient.set_topic_attributes(
+        TopicArn=topicArn,
+        AttributeName='Policy',
+        AttributeValue=json.dumps(sns_topic_policy)
+    )
+    log_to_logs(f"SNS topic policy update response: {response}")
+except Exception as error:
+    print(f'Error setting SNS topic policy: {error}')
+
+# Configures the S3 bucket to send notifications to the SNS topic for object creation events
+try:
+    response = s3client.put_bucket_notification_configuration(
+        Bucket=new_bucket.name,
+        NotificationConfiguration={
+            'TopicConfigurations': [
+                {
+                    'Events': [
+                        's3:ObjectCreated:*',
+                    ],
+                    'TopicArn': topicArn,
+                },
+            ],
+        },
+    )
+    log_to_logs(f"Putting bucket notification configuration response: {response}")
+except Exception as error:
+    print(f'Error putting S3 bucket notification configuration: {error}')
+
 print(f'!!! Downloading image from {image_url}...')
 # Downloads an image from the specified URL
 try:
@@ -225,6 +300,7 @@ except Exception as error:
  print (f'Error uploading index.html to {new_bucket.name}: {error}')
 
 print(f'!!! {new_bucket.name} launched! Visit the web page at: http://{new_bucket.name}.s3-website-us-east-1.amazonaws.com\n!!! Writing website to freilly-websites.txt...')
+
 try:
     with open('freilly-websites.txt','a') as file:
         response = file.write(f'\nS3 Bucket: http://{new_bucket.name}.s3-website-us-east-1.amazonaws.com')
@@ -242,7 +318,28 @@ try:
 except Exception as error:
     print(f'Error ensuring {key_name}.pem has correct permissions: {error}')
 
-print(f'!!! Copying monitoring.sh to {new_instances[0].public_ip_address}...')
+print(f'!!! Ensuring SSH to {new_instances[0].public_ip_address} is available...')
+# https://stackoverflow.com/questions/47423746/how-can-i-verify-that-an-ssh-connection-is-possible-without-login-information, 
+# https://docs.python.org/3/library/socket.html
+
+def check_ssh(ip, port=22):
+    # Checks if SSH is avaiable on the specified address and port (22 for SSH)
+    try: 
+        test_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        response = test_socket.connect_ex((ip, 22))
+        log_to_logs(f"Ensuring SSH to {new_instances[0].public_ip_address} is available response: {response}")
+        test_socket.close()
+        return response == 0 # If the response is 0, SSH is available
+    except Exception as error:
+        print(f'Error ensuring SSH to {new_instances[0].public_ip_address} is available: {error}')
+        return False
+
+# Checks for SSH access until it's available
+while not check_ssh(new_instances[0].public_ip_address):
+    print(f'!!! Waiting for SSH access to {new_instances[0].public_ip_address}...')
+    time.sleep(2)
+
+print(f'!!! SSH access available to {new_instances[0].public_ip_address}!\n!!! Copying monitoring.sh to {new_instances[0].public_ip_address}...')
 # Copies the monitoring.sh script to the new EC2 instance
 try:
     command = f"scp -o StrictHostKeyChecking=no -i {key_name}.pem monitoring.sh ec2-user@{new_instances[0].public_ip_address}:."

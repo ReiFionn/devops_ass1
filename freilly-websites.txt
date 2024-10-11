@@ -1,2 +1,2 @@
-EC2 Instance: http://18.234.135.108
-S3 Bucket: http://mk7rhk-freilly.s3-website-us-east-1.amazonaws.com
+EC2 Instance: http://54.208.11.223
+S3 Bucket: http://9iantp-freilly.s3-website-us-east-1.amazonaws.com
